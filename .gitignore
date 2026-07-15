@@ -4,6 +4,7 @@ docs/
 data/
 *.tif
 *.tiff
+requirements.txt
 
 # Python
 __pycache__/
