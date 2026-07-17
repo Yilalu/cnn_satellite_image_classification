@@ -1,5 +1,6 @@
 # Data
 satellite_data/
+test_set/
 docs/
 data/
 *.tif
@@ -15,6 +16,7 @@ __pycache__/
 venv/
 env/
 
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -24,6 +26,7 @@ env/
 *.pth
 *.ckpt
 *.onnx
+extract.py
 checkpoints/
 runs/
 logs/

@@ -1,6 +1,7 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 from PIL import Image
 
 
@@ -16,7 +17,7 @@ def load_model():
 model = load_model()
 
 
-# Class names (make sure this matches your training class_names)
+# Class names
 classes = [
     "AnnualCrop",
     "Forest",
@@ -31,17 +32,10 @@ classes = [
 ]
 
 
-st.title("🛰️ Satellite Image Recognition")
+st.set_page_config(page_title="Satellite Image Recognition", layout="centered")
 
-st.write(
-    "Upload a satellite image and the model will classify it."
-)
-
-
-# Debug model information
-st.write("Model input shape:", model.input_shape)
-st.write("Model output shape:", model.output_shape)
-
+st.title("Satellite Image Recognition")
+st.write("Upload a satellite image and the model will classify it into one of 10 land-cover types.")
 
 # Upload image
 uploaded_file = st.file_uploader(
@@ -54,99 +48,76 @@ if uploaded_file:
 
     # Open image
     image = Image.open(uploaded_file)
-
-    # Make sure image has 3 channels
     image = image.convert("RGB")
-
-
-    st.image(
-        image,
-        caption="Uploaded Image",
-        width="content"
-    )
-
 
     # -------------------------
     # Preprocessing
     # -------------------------
-
-    # Resize to model expected size
-    img = image.resize((128, 128))
-
-
-    # Convert to numpy array
-    img_array = np.array(img)
-
-
-    # Convert to float32
-    # DO NOT divide by 255
-    # Model already contains Rescaling(1./255)
-    img_array = img_array.astype("float32")
-
-
-    # Add batch dimension
-    img_array = np.expand_dims(
-        img_array,
-        axis=0
-    )
-
-
-    # Debug
-    st.write(
-        "Input shape:",
-        img_array.shape
-    )
-
-    st.write(
-        "Pixel range:",
-        img_array.min(),
-        "-",
-        img_array.max()
-    )
-
+    img = image.resize((64, 64))
+    img_array = np.array(img).astype("float32")
+    img_array = np.expand_dims(img_array, axis=0)  # add batch dimension
 
     # -------------------------
     # Prediction
     # -------------------------
-
-    prediction = model.predict(img_array)
-
-
-    st.write(
-        "Raw prediction:",
-        prediction
-    )
-
-
-    class_id = np.argmax(prediction[0])
-
-    confidence = np.max(prediction[0])
-
-
-    st.subheader("Prediction")
-
-
-    st.success(
-        classes[class_id]
-    )
-
-
-    st.write(
-        f"Confidence: {confidence * 100:.2f}%"
-    )
-
+    prediction = model.predict(img_array, verbose=0)[0]
+    class_id = np.argmax(prediction)
+    confidence = np.max(prediction)
+    predicted_class = classes[class_id]
 
     # -------------------------
-    # All class probabilities
+    # Layout: image on the left, headline result on the right
     # -------------------------
+    col1, col2 = st.columns([1, 1])
 
-    st.subheader(
-        "Class Probabilities"
+    with col1:
+        st.image(image, caption="Uploaded Image", use_container_width=True)
+
+    with col2:
+        st.subheader("Prediction")
+        st.success(f"**{predicted_class}**")
+        st.metric(label="Confidence", value=f"{confidence * 100:.1f}%")
+
+        # Simple visual confidence indicator
+        st.progress(float(confidence))
+
+        if confidence < 0.5:
+            st.warning("⚠️ Low confidence — the model isn't very sure about this one.")
+
+    # -------------------------
+    # Class probability chart
+    # -------------------------
+    st.subheader("Class Probabilities")
+
+    prob_df = pd.DataFrame({
+        "Class": classes,
+        "Probability": prediction * 100
+    }).sort_values("Probability", ascending=True)
+
+    # Highlight the predicted class differently from the rest
+    prob_df["Predicted"] = prob_df["Class"] == predicted_class
+
+    st.bar_chart(
+        prob_df.set_index("Class")["Probability"],
+        horizontal=True,
     )
 
-
-    for i, prob in enumerate(prediction[0]):
-
-        st.write(
-            f"{classes[i]}: {prob * 100:.2f}%"
+    # exact numbers in a compact table below the chart
+    with st.expander("See exact probabilities"):
+        st.dataframe(
+            prob_df[["Class", "Probability"]]
+            .sort_values("Probability", ascending=False)
+            .style.format({"Probability": "{:.2f}%"}),
+            hide_index=True,
+            use_container_width=True,
         )
+
+    # -------------------------
+    # Debug info tucked away instead of cluttering the main view
+    # -------------------------
+    with st.expander("Detailed info"):
+        st.write("Model input shape:", model.input_shape)
+        st.write("Model output shape:", model.output_shape)
+        st.write("Preprocessed input shape:", img_array.shape)
+        st.write("Pixel range:", img_array.min(), "-", img_array.max())
+        st.write("Raw prediction vector:", prediction)
